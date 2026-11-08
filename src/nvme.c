@@ -39,8 +39,10 @@
 #define NVME_BOOT_STATUS    0x1300
 #define NVME_BOOT_STATUS_OK 0xde71ce55
 
-#define NVME_LINEAR_SQ_CTRL    0x24908
-#define NVME_LINEAR_SQ_CTRL_EN BIT(0)
+#define NVME_LINEAR_SQ_CTRL        0x24908
+#define NVME_LINEAR_SQ_CTRL_EN     BIT(0)
+#define NVME_SECURE_LINEAR_SQ_CTRL 0x2813c
+#define NVME_SECURE_OFFSET         0x4000
 
 #define NVME_IOQ_CMDS           0x1200
 #define NVME_IOQ_CQES           0x1208
@@ -125,6 +127,7 @@ static_assert(sizeof(struct apple_nvmmu_tcb) == 128, "invalid apple_nvmmu_tcb si
 static enum {
     NVME_T8103 = 0,
     NVME_T8132 = 1,
+    NVME_T8152 = 2,
 } nvme_type;
 
 static bool nvme_initialized = false;
@@ -316,10 +319,12 @@ bool nvme_init(void)
     }
 
     if (adt_get_property(adt, node, "nvme-secure-bar"))
-        // M4+ generations have the nvme-secure-bar property and 10+ regs.
+        // M4 uses the nvme-secure-bar property and 10+ regs.
         // They use reg[3] for NVMMU registers and reg[9] for NVMe registers,
         // and require extra writes to set up the IO queues.
         nvme_type = NVME_T8132;
+    else if (adt_get_property(adt, node, "nvme-secure-reg-layout"))
+        nvme_type = NVME_T8152;
     else
         // M1-M3 generations use reg[3] for both NVMMU and NVMe registers.
         nvme_type = NVME_T8103;
@@ -336,6 +341,7 @@ bool nvme_init(void)
     } else {
         nvme_base = nvmmu_base;
     }
+    u32 nvme_secure_offset = nvme_type == NVME_T8152 ? NVME_SECURE_OFFSET : 0;
 
     u32 cg;
     if (ADT_GETPROP(adt, node, "clock-gates", &cg) < 0) {
@@ -379,8 +385,11 @@ bool nvme_init(void)
     }
 
     /* setup controller and NVMMU for linear submission queue */
-    set32(nvme_base + NVME_LINEAR_SQ_CTRL, NVME_LINEAR_SQ_CTRL_EN);
-    write32(nvme_base + NVME_MAX_PEND_CMDS_CTRL,
+    u64 linear_sq_ctrl = nvme_base + NVME_LINEAR_SQ_CTRL;
+    if (nvme_type == NVME_T8152)
+        linear_sq_ctrl = nvmmu_base + NVME_SECURE_LINEAR_SQ_CTRL;
+    set32(linear_sq_ctrl, NVME_LINEAR_SQ_CTRL_EN);
+    write32(nvme_base + nvme_secure_offset + NVME_MAX_PEND_CMDS_CTRL,
             ((NVME_QUEUE_SIZE - 1) << 16) | (NVME_QUEUE_SIZE - 1));
     write32(nvmmu_base + NVMMU_NUM, NVME_QUEUE_SIZE - 1);
     write64_lo_hi(nvmmu_base + NVMMU_ASQ_BASE, (u64)adminq.tcbs);
@@ -391,9 +400,10 @@ bool nvme_init(void)
         printf("nvme: timeout while waiting for CSTS.RDY to clear\n");
         goto out_shutdown;
     }
-    write64_lo_hi(nvme_base + NVME_ASQ, (u64)adminq.cmds);
-    write64_lo_hi(nvme_base + NVME_ACQ, (u64)adminq.cqes);
-    write32(nvme_base + NVME_AQA, ((NVME_QUEUE_SIZE - 1) << 16) | (NVME_QUEUE_SIZE - 1));
+    write64_lo_hi(nvme_base + nvme_secure_offset + NVME_ASQ, (u64)adminq.cmds);
+    write64_lo_hi(nvme_base + nvme_secure_offset + NVME_ACQ, (u64)adminq.cqes);
+    write32(nvme_base + nvme_secure_offset + NVME_AQA,
+            ((NVME_QUEUE_SIZE - 1) << 16) | (NVME_QUEUE_SIZE - 1));
     if (!nvme_ctrl_enable()) {
         printf("nvme: timeout while waiting for CSTS.RDY to be set\n");
         goto out_disable_ctrl;
@@ -425,12 +435,12 @@ bool nvme_init(void)
         goto out_delete_cq;
     }
 
-    if (nvme_type == NVME_T8132) {
+    if (nvme_type == NVME_T8132 || nvme_type == NVME_T8152) {
         // Extra write required to set up the IO queues on M4+.
         // Otherwise, the ANS crashes and the crashlog says
         // `I/O SQ  : 0x000000000` / `I/O CQ  : 0x000000000`.
-        write64_lo_hi(nvme_base + NVME_IOQ_CQES, (u64)ioq.cqes);
-        write64_lo_hi(nvme_base + NVME_IOQ_CMDS, (u64)ioq.cmds);
+        write64_lo_hi(nvme_base + nvme_secure_offset + NVME_IOQ_CQES, (u64)ioq.cqes);
+        write64_lo_hi(nvme_base + nvme_secure_offset + NVME_IOQ_CMDS, (u64)ioq.cmds);
     }
 
     nvme_initialized = true;
