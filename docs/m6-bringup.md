@@ -1,6 +1,6 @@
 # M6 bring-up build
 
-Development continues on `main` from the MIT snapshot identified by `last-mit` (`809541515659bf4e504807fd72bc0a539be5eee7`). Keep that tag unchanged. New bootloader changes remain MIT and retain the existing component notices.
+Development starts from the MIT snapshot identified by `last-mit` (`809541515659bf4e504807fd72bc0a539be5eee7`). Keep that tag unchanged. Use feature branches and squash validated changes into `main`. New bootloader changes remain MIT and retain the existing component notices. Keep research notes, hardware captures, and experimental scripts outside Git.
 
 ## Build
 
@@ -31,8 +31,3 @@ Prepare a separate test OS volume group using a macOS version compatible with th
 
 The preserved installer does not list `T8152` or `J873gAP` and has no compatible M6 firmware entry. Its existing M1–M3 installation recipes are not a validated M6 installation path.
 
-## Hardware validation
-
-On 2026-11-08, `last-mit-1-g300cf7f-m6-bringup` booted on the target described above, identified the M6 Komodo performance core, and reached the proxy in EL2. The host received successful proxy NOP replies and chip ID `0x8152` over dockchannel UART. A read-only capture retrieved the revision 3 boot arguments and the 753,664-byte firmware ADT, with the proxy protocol's data checksum verified. The existing host parser decoded 189 nodes, and the target remained responsive after capture.
-
-Both firmware version strings were `mBoot-20457.41.3`, which the current version table reports as unknown. The capture includes `aic,3` and `pmgr2,t8152` devices. These observations establish the minimal boot and debug path; normal subsystem initialization and Linux boot remain unverified.
