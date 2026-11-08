@@ -23,6 +23,13 @@ from m1n1 import asm
 from m1n1.bootmem import BOOT_BLOBS, find_boot_blobs, copy_boot_blobs
 from construct import Array, Int64ul
 
+for cpu in u.adt["cpus"]:
+    if cpu.state == "running":
+        continue
+    index = cpu.cpu_id if hasattr(cpu, "cpu_id") else cpu.reg
+    if p.smp_is_alive(index):
+        raise RuntimeError("Stop secondary CPUs before chainloading")
+
 new_base = u.base
 
 if args.raw:

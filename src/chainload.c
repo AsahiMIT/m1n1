@@ -7,6 +7,7 @@
 #include "malloc.h"
 #include "memory.h"
 #include "nvme.h"
+#include "smp.h"
 #include "string.h"
 #include "types.h"
 #include "utils.h"
@@ -21,6 +22,11 @@ extern u8 _chainload_stub_end[];
 
 int chainload_image(void *image, size_t size, char **vars, size_t var_cnt)
 {
+    if (smp_has_live_secondaries()) {
+        printf("chainload: Stop secondary CPUs first\n");
+        return -1;
+    }
+
     u64 new_base = (u64)_base;
     size_t image_size = size;
 
