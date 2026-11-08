@@ -1030,7 +1030,10 @@ class M1N1Proxy(Reloadable):
     def smp_wait(self, cpu):
         return self.request(self.P_SMP_WAIT, cpu)
     def smp_set_wfe_mode(self, mode):
-        return self.request(self.P_SMP_SET_WFE_MODE, mode)
+        result = self.request(self.P_SMP_SET_WFE_MODE, mode, signed=True)
+        if result < 0:
+            raise ProxyRemoteError("Failed to change SMP wait mode")
+        return result
     def smp_is_alive(self, cpu):
         return self.request(self.P_SMP_IS_ALIVE, cpu)
     def smp_stop_secondaries(self, deep_sleep=False):

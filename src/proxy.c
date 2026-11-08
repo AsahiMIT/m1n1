@@ -364,7 +364,7 @@ int proxy_process(ProxyRequest *request, ProxyReply *reply)
             reply->retval = smp_wait(request->args[0]);
             break;
         case P_SMP_SET_WFE_MODE:
-            smp_set_wfe_mode(request->args[0]);
+            reply->retval = smp_set_wfe_mode(request->args[0]);
             break;
         case P_SMP_IS_ALIVE:
             reply->retval = smp_is_alive(request->args[0]);

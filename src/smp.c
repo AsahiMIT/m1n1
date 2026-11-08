@@ -62,6 +62,8 @@ struct cpu_info {
 
 static bool smp_initialized = false;
 static u64 cpu_start_base;
+static u8 cpu_start_stride = 4;
+static bool cpu_start_rmw;
 static struct cpu_info cpu_info[MAX_CPUS];
 
 // Used from start.S to find the correct stack after the first entry
@@ -193,10 +195,17 @@ static void smp_start_cpu(int index, const struct cpu_info *cpu)
 
     // Some kind of system level startup/status bit
     // Without this, IRQs don't work
-    write32(start_base + 0x4, 1 << (4 * cpu->cluster + cpu->core));
+    u32 online = BIT(cpu_start_stride * cpu->cluster + cpu->core);
+    if (cpu_start_rmw)
+        set32(start_base + 0x4, online);
+    else
+        write32(start_base + 0x4, online);
 
     // Actually start the core
-    write32(start_base + 0x8 + 4 * cpu->cluster, 1 << cpu->core);
+    if (cpu_start_rmw)
+        set32(start_base + 0x8 + 4 * cpu->cluster, BIT(cpu->core));
+    else
+        write32(start_base + 0x8 + 4 * cpu->cluster, BIT(cpu->core));
 
     for (i = 0; i < 100; i++) {
         sysop("dmb ld");
@@ -320,8 +329,13 @@ int smp_init(void)
         case T8132:
         case T8140:
         case T8142:
+            cpu_start_off = CPU_START_OFF_T8112;
+            break;
         case T8152:
             cpu_start_off = CPU_START_OFF_T8112;
+            cpu_start_stride = 6;
+            cpu_start_rmw = true;
+            smp_set_wfe_mode(true);
             break;
         case T6020:
         case T6021:
@@ -422,6 +436,11 @@ int smp_init(void)
         cpu_info[i].cluster = FIELD_GET(CPU_REG_CLUSTER, reg);
         cpu_info[i].die = FIELD_GET(CPU_REG_DIE, reg);
         cpu_info[i].impl_reg = cpu_impl_reg[0];
+        if (chip_id == T8152 &&
+            (cpu_info[i].die || cpu_info[i].cluster >= 2 || cpu_info[i].core >= cpu_start_stride)) {
+            printf("Invalid T8152 CPU reg: 0x%x\n", reg);
+            cpu_info[i].valid = false;
+        }
     }
 
     cpu_start_base = pmgr_reg + cpu_start_off;
@@ -465,6 +484,11 @@ int smp_stop_secondaries(bool deep_sleep)
 
     if (!smp_initialized)
         return 0;
+
+    if (chip_id == T8152 && smp_has_live_secondaries()) {
+        printf("CPU stop is not supported on T8152\n");
+        return -1;
+    }
 
     smp_set_wfe_mode(true);
 
@@ -534,16 +558,22 @@ u64 smp_wait(int cpu)
     return target->retval;
 }
 
-void smp_set_wfe_mode(bool new_mode)
+int smp_set_wfe_mode(bool new_mode)
 {
+    if (chip_id == T8152 && !new_mode) {
+        printf("T8152 requires WFE mode\n");
+        return -1;
+    }
+
     wfe_mode = new_mode;
     sysop("dsb sy");
 
     for (int cpu = 0; cpu < MAX_CPUS; cpu++)
-        if (cpu != boot_cpu_idx && smp_is_alive(cpu))
+        if (chip_id != T8152 && cpu != boot_cpu_idx && smp_is_alive(cpu))
             smp_send_ipi(cpu);
 
     sysop("sev");
+    return 0;
 }
 
 bool smp_is_alive(int cpu)
