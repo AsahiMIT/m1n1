@@ -1034,7 +1034,8 @@ class M1N1Proxy(Reloadable):
     def smp_is_alive(self, cpu):
         return self.request(self.P_SMP_IS_ALIVE, cpu)
     def smp_stop_secondaries(self, deep_sleep=False):
-        self.request(self.P_SMP_STOP_SECONDARIES, deep_sleep)
+        if self.request(self.P_SMP_STOP_SECONDARIES, deep_sleep, signed=True) < 0:
+            raise ProxyRemoteError("Failed to stop secondary CPUs")
     def smp_call_el1(self, cpu, addr, *args):
         if len(args) > 3:
             raise ValueError("Too many arguments")

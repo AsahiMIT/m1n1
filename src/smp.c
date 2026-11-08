@@ -459,12 +459,12 @@ void smp_start_secondaries(void)
     }
 }
 
-void smp_stop_secondaries(bool deep_sleep)
+int smp_stop_secondaries(bool deep_sleep)
 {
     printf("Stopping secondary CPUs...\n");
 
     if (!smp_initialized)
-        return;
+        return 0;
 
     smp_set_wfe_mode(true);
 
@@ -476,6 +476,8 @@ void smp_stop_secondaries(bool deep_sleep)
 
         smp_stop_cpu(i, cpu, deep_sleep);
     }
+
+    return smp_has_live_secondaries() ? -1 : 0;
 }
 
 void smp_send_ipi(int cpu)
@@ -550,6 +552,14 @@ bool smp_is_alive(int cpu)
         return false;
 
     return spin_table[cpu].flag;
+}
+
+bool smp_has_live_secondaries(void)
+{
+    for (int cpu = 0; cpu < MAX_CPUS; cpu++)
+        if (cpu != boot_cpu_idx && smp_is_alive(cpu))
+            return true;
+    return false;
 }
 
 uint64_t smp_get_mpidr(int cpu)
