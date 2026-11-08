@@ -10,9 +10,17 @@ On an Apple Silicon macOS host, install the dependencies described in the root R
 ./tools/build-m6-bringup.sh
 ```
 
-The script cleans the existing build directory before changing compiler flags, then builds with `BRINGUP`, `TARGET=T8152`, `RELEASE=0`, and `CHAINLOADING=0`. Set `JOBS` to override the default eight build jobs. Outputs are `build/m1n1.bin` and `build/m1n1.macho`; the embedded version ends with `-m6-bringup`.
+The script cleans the existing build directory before changing compiler flags, then builds with `BRINGUP`, `TARGET=T8152`, `RELEASE=0`, and `CHAINLOADING=0`. Set `JOBS` to override the default eight build jobs. Outputs are `build/m1n1.bin` and `build/m1n1.macho`; the minimal profile's embedded version ends with `-m6-bringup`.
 
 This uses the existing minimal initialization path. It skips the normal MMU, interrupt-controller, secondary-CPU, power-management, display, SEP, and USB-controller initialization. Dockchannel UART setup remains available for the DebugUSB connection established by the host.
+
+To add interrupt-controller initialization while leaving the other subsystems disabled:
+
+```sh
+./tools/build-m6-bringup.sh aic
+```
+
+This adds `BRINGUP_AIC` and uses the version suffix `-m6-bringup-aic`. It initializes the existing AIC driver but does not enable CPU IRQ delivery or establish Linux interrupt support. Omitting the argument, or passing `minimal`, selects the original minimal profile.
 
 ## Target and connection
 
@@ -30,4 +38,3 @@ Find the current `/dev/cu.kis-*-ch-0` device and set `M1N1DEVICE` to that path. 
 Prepare a separate test OS volume group using a macOS version compatible with the target. Install the raw binary as that test system's custom boot object from its paired recovery environment, following the current macOS boot-policy requirements. Verify the intended test volume before running `kmutil configure-boot`; the existing `tools/kmutil.py` helper selects the default boot volume automatically.
 
 The preserved installer does not list `T8152` or `J873gAP` and has no compatible M6 firmware entry. Its existing M1–M3 installation recipes are not a validated M6 installation path.
-

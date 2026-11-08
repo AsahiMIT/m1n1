@@ -156,7 +156,11 @@ void m1n1_main(void)
         gxf_init();
     mcc_init();
     mmu_init();
+#endif
+#if !defined(BRINGUP) || defined(BRINGUP_AIC)
     aic_init();
+#endif
+#ifndef BRINGUP
     smp_init();
 #endif
     wdt_disable();
