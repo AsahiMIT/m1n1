@@ -1,4 +1,9 @@
 #!/usr/bin/env sh
-magick bootlogo_48.png -background black -flatten -depth 8 rgba:bootlogo_48.bin
-magick bootlogo_128.png -background black -flatten -depth 8 rgba:bootlogo_128.bin
-magick bootlogo_256.png -background black -flatten -depth 8 rgba:bootlogo_256.bin
+# SPDX-License-Identifier: MIT
+set -eu
+cd "$(dirname "$0")"
+
+for size in 48 128 256; do
+    rsvg-convert -w "$size" -h "$size" hikari-linux.svg -o "bootlogo_$size.png"
+    magick "bootlogo_$size.png" -background black -flatten -depth 8 "rgba:bootlogo_$size.bin"
+done

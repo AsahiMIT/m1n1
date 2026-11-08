@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <title>Hikari Linux</title>
+  <g transform="translate(0 10)">
+    <path fill="#FFF0D2" d="M43 41L92 73H164L213 41L206 145L169 177L150 187H106L87 177L50 145Z"/>
+    <path fill="#F0AB62" d="M43 41L92 73L128 82L96 133L50 145Z"/>
+    <path fill="#425A68" d="M128 82L164 73L213 41L206 145L159 133Z"/>
+    <path fill="#F3D4A0" d="M50 145L96 133L128 153V187H106L87 177Z"/>
+    <path fill="#FFF7E4" d="M96 133L128 82L159 133L128 153Z"/>
+    <path fill="#BD7B48" d="M55 62L79 79L57 91Z"/>
+    <path fill="#7D96A2" d="M201 62L177 79L199 91Z"/>
+    <path fill="#425A68" d="M120 149H136L128 158Z"/>
+    <path fill="#425A68" d="M77 117L85 113L93 117L85 125Z"/>
+    <path fill="#FFE1A0" d="M163 117L171 113L179 117L171 125Z"/>
+  </g>
+</svg>
