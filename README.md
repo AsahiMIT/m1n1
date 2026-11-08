@@ -86,8 +86,8 @@ Supported compression formats:
 
 The Hikari Linux fork of m1n1 is based on Asahi Linux's last MIT-licensed mainline
 commit, preserved in the [`last-mit`](https://github.com/HikariLinux/m1n1/tree/last-mit)
-snapshot. This fork is licensed under the MIT license, as included in the
-[LICENSE](LICENSE) file.
+snapshot. This fork is maintained by Hikari Linux and licensed under the MIT
+license, as included in the [LICENSE](LICENSE) file.
 
 * Copyright The Hikari Linux Contributors
 * Copyright The Asahi Linux Contributors
