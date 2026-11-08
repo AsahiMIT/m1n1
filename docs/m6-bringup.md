@@ -12,7 +12,7 @@ On an Apple Silicon macOS host, install the dependencies described in the root R
 
 The script cleans the existing build directory before changing compiler flags, then builds with `BRINGUP`, `TARGET=T8152`, `RELEASE=0`, and `CHAINLOADING=0`. Set `JOBS` to override the default eight build jobs. Outputs are `build/m1n1.bin` and `build/m1n1.macho`; the embedded version ends with `-m6-bringup`.
 
-This uses the existing minimal initialization path. It skips the normal MMU, interrupt-controller, secondary-CPU, power-management, display, SEP, and USB-controller initialization. Dockchannel UART setup remains available for the DebugUSB connection established by the host. The first runtime milestone is reaching the proxy and capturing the firmware-provided device tree. Compilation alone does not establish that the firmware boots on M6.
+This uses the existing minimal initialization path. It skips the normal MMU, interrupt-controller, secondary-CPU, power-management, display, SEP, and USB-controller initialization. Dockchannel UART setup remains available for the DebugUSB connection established by the host.
 
 ## Target and connection
 
@@ -29,4 +29,10 @@ Find the current `/dev/cu.kis-*-ch-0` device and set `M1N1DEVICE` to that path. 
 
 Prepare a separate test OS volume group using a macOS version compatible with the target. Install the raw binary as that test system's custom boot object from its paired recovery environment, following the current macOS boot-policy requirements. Verify the intended test volume before running `kmutil configure-boot`; the existing `tools/kmutil.py` helper selects the default boot volume automatically.
 
-The preserved installer does not list `T8152` or `J873gAP` and has no compatible M6 firmware entry. Its existing M1–M3 installation recipes are not a validated M6 installation path. Booting this image on M6 and collecting a proxy response remain pending hardware validation.
+The preserved installer does not list `T8152` or `J873gAP` and has no compatible M6 firmware entry. Its existing M1–M3 installation recipes are not a validated M6 installation path.
+
+## Hardware validation
+
+On 2026-11-08, `last-mit-1-g300cf7f-m6-bringup` booted on the target described above, identified the M6 Komodo performance core, and reached the proxy in EL2. The host received successful proxy NOP replies and chip ID `0x8152` over dockchannel UART. A read-only capture retrieved the revision 3 boot arguments and the 753,664-byte firmware ADT, with the proxy protocol's data checksum verified. The existing host parser decoded 189 nodes, and the target remained responsive after capture.
+
+Both firmware version strings were `mBoot-20457.41.3`, which the current version table reports as unknown. The capture includes `aic,3` and `pmgr2,t8152` devices. These observations establish the minimal boot and debug path; normal subsystem initialization and Linux boot remain unverified.
