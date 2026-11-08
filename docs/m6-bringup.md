@@ -1,6 +1,6 @@
 # M6 bring-up build
 
-Development starts from the MIT snapshot identified by `last-mit` (`809541515659bf4e504807fd72bc0a539be5eee7`). Keep that tag unchanged. Use feature branches and squash validated changes into `main`. New bootloader changes remain MIT and retain the existing component notices. Keep research notes, hardware captures, and experimental scripts outside Git.
+Development starts from the MIT snapshot identified by `last-mit` (`809541515659bf4e504807fd72bc0a539be5eee7`). Keep that tag unchanged. Base feature branches on `dev/m6` and squash cleaned, validated changes into it. For promotion, rebase `dev/m6` onto `main`, then fast-forward `main` to preserve each curated commit. New bootloader changes remain MIT and retain the existing component notices. Keep research notes, hardware captures, and experimental scripts outside Git.
 
 ## Build
 
