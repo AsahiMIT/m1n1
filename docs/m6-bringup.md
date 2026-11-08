@@ -20,7 +20,15 @@ To add interrupt-controller initialization while leaving the other subsystems di
 ./tools/build-m6-bringup.sh aic
 ```
 
-This adds `BRINGUP_AIC` and uses the version suffix `-m6-bringup-aic`. It initializes the existing AIC driver but does not enable CPU IRQ delivery or establish Linux interrupt support. Omitting the argument, or passing `minimal`, selects the original minimal profile.
+This adds `BRINGUP_AIC` and uses the version suffix `-m6-bringup-aic`. It initializes the existing AIC driver but does not test interrupt delivery or establish Linux interrupt support. Omitting the argument, or passing `minimal`, selects the original minimal profile.
+
+To test paging and caches together with AIC initialization:
+
+```sh
+./tools/build-m6-bringup.sh mmu
+```
+
+This adds `BRINGUP_MMU` and uses the suffix `-m6-bringup-mmu`. RAM mappings cover the boot-data region beginning at `phys_base` and a heap of at most 64 MiB. The allocator is limited to that window. This profile skips MCC initialization and the broader firmware `pmap-io-ranges` remapping; ARM-IO MMIO mappings remain available. It is an early paging test, not a complete physical-memory map for Linux or device firmware. Cache maintenance across devices and subsequent payloads remains unvalidated. Secondary CPUs and the other disabled subsystems remain disabled.
 
 ## Target and connection
 

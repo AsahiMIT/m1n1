@@ -155,6 +155,8 @@ void m1n1_main(void)
     if (supports_gxf())
         gxf_init();
     mcc_init();
+#endif
+#if !defined(BRINGUP) || defined(BRINGUP_MMU)
     mmu_init();
 #endif
 #if !defined(BRINGUP) || defined(BRINGUP_AIC)
@@ -206,6 +208,8 @@ void m1n1_main(void)
 #ifdef USE_FB
     fb_shutdown(next_stage.restore_logo);
 #endif
+#endif
+#if !defined(BRINGUP) || defined(BRINGUP_MMU)
     mmu_shutdown();
 #endif
 

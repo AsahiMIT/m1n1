@@ -9,7 +9,7 @@ extra_cflags='-DBRINGUP -DTARGET=T8152'
 suffix=''
 
 if [ "$#" -gt 1 ]; then
-    echo "Usage: $0 [minimal|aic]" >&2
+    echo "Usage: $0 [minimal|aic|mmu]" >&2
     exit 1
 fi
 
@@ -19,8 +19,12 @@ case "$stage" in
         extra_cflags="$extra_cflags -DBRINGUP_AIC"
         suffix='-aic'
         ;;
+    mmu)
+        extra_cflags="$extra_cflags -DBRINGUP_AIC -DBRINGUP_MMU"
+        suffix='-mmu'
+        ;;
     *)
-        echo "Usage: $0 [minimal|aic]" >&2
+        echo "Usage: $0 [minimal|aic|mmu]" >&2
         exit 1
         ;;
 esac

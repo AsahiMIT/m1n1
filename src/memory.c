@@ -6,6 +6,7 @@
 #include "cpu_regs.h"
 #include "fb.h"
 #include "gxf.h"
+#include "heapblock.h"
 #include "malloc.h"
 #include "mcc.h"
 #include "smp.h"
@@ -419,6 +420,7 @@ static void mmu_map_mmio(void)
     }
 }
 
+#ifndef BRINGUP_MMU
 static void mmu_remap_ranges(void)
 {
 
@@ -452,6 +454,8 @@ static void mmu_remap_ranges(void)
     }
 }
 
+#endif
+
 void mmu_map_framebuffer(u64 addr, size_t size)
 {
     printf("MMU: Adding Normal-NC mapping at 0x%lx (0x%zx) for framebuffer\n", addr, size);
@@ -482,20 +486,39 @@ static void mmu_add_default_mappings(void)
     uint64_t ram_size = cur_boot_args.mem_size + cur_boot_args.phys_base - ram_base;
     ram_size = ALIGN_DOWN(ram_size, PAGE_SIZE);
 
+    u64 map_base = ram_base;
+    u64 map_size = mem_size_actual;
+#ifdef BRINGUP_MMU
+    map_base = cur_boot_args.phys_base;
+    u64 ram_end = ALIGN_DOWN(map_base + cur_boot_args.mem_size, PAGE_SIZE);
+    u64 heap_base = ALIGN_UP(cur_boot_args.top_of_kernel_data, PAGE_SIZE);
+    if (map_base % PAGE_SIZE || ram_end <= map_base ||
+        heap_base < cur_boot_args.top_of_kernel_data || heap_base < map_base ||
+        heap_base >= ram_end || (u64)_base < map_base || (u64)_end > heap_base)
+        panic("MMU: Invalid bring-up memory bounds\n");
+
+    u64 heap_end = heap_base + min(ram_end - heap_base, 64 * 1024 * 1024);
+    heapblock_set_limit((void *)heap_end);
+    map_size = ram_size = heap_end - map_base;
+    printf("MMU: Bring-up RAM: 0x%lx..0x%lx\n", map_base, heap_end);
+#endif
+
     printf("MMU: RAM base: 0x%lx\n", ram_base);
-    printf("MMU: Top of normal RAM: 0x%lx\n", ram_base + ram_size);
+    printf("MMU: Top of normal RAM: 0x%lx\n", map_base + ram_size);
 
     mmu_map_mmio();
 
     /*
-     * Create identity mapping for RAM from 0x08_0000_0000
+     * Create an identity mapping for the selected RAM window.
      * With SPRR enabled, this becomes RW.
-     * This range includes all real RAM, including carveouts
+     * Normal builds include all physical RAM, including carveouts.
      */
-    mmu_add_mapping(ram_base, ram_base, mem_size_actual, MAIR_IDX_NORMAL, PERM_RWX);
+    mmu_add_mapping(map_base, map_base, map_size, MAIR_IDX_NORMAL, PERM_RWX);
 
     /* Unmap carveout regions */
+#ifndef BRINGUP_MMU
     mcc_unmap_carveouts();
+#endif
 
     /*
      * Remap m1n1 executable code as RX.
@@ -513,19 +536,19 @@ static void mmu_add_default_mappings(void)
      * read/writable/exec by EL0 (but not executable by EL1)
      * With SPRR enabled, this becomes RX_EL0.
      */
-    mmu_add_mapping(ram_base | REGION_RWX_EL0, ram_base, ram_size, MAIR_IDX_NORMAL, PERM_RWX_EL0);
+    mmu_add_mapping(map_base | REGION_RWX_EL0, map_base, ram_size, MAIR_IDX_NORMAL, PERM_RWX_EL0);
     /*
      * Create mapping for RAM from 0x98_0000_0000,
      * read/writable by EL0 (but not executable by EL1)
      * With SPRR enabled, this becomes RW_EL0.
      */
-    mmu_add_mapping(ram_base | REGION_RW_EL0, ram_base, ram_size, MAIR_IDX_NORMAL, PERM_RW_EL0);
+    mmu_add_mapping(map_base | REGION_RW_EL0, map_base, ram_size, MAIR_IDX_NORMAL, PERM_RW_EL0);
     /*
      * Create mapping for RAM from 0xa8_0000_0000,
      * read/executable by EL1
      * This allows executing from dynamic regions in EL1
      */
-    mmu_add_mapping(ram_base | REGION_RX_EL1, ram_base, ram_size, MAIR_IDX_NORMAL, PERM_RX_EL0);
+    mmu_add_mapping(map_base | REGION_RX_EL1, map_base, ram_size, MAIR_IDX_NORMAL, PERM_RX_EL0);
 
     /*
      * Create four separate full mappings of MMIO space, with different access types
@@ -538,7 +561,9 @@ static void mmu_add_default_mappings(void)
     /*
      * Handle pmap-ranges
      */
+#ifndef BRINGUP_MMU
     mmu_remap_ranges();
+#endif
     mmu_remap_smp_shared();
 }
 
