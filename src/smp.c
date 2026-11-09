@@ -335,7 +335,6 @@ int smp_init(void)
             cpu_start_off = CPU_START_OFF_T8112;
             cpu_start_stride = 6;
             cpu_start_rmw = true;
-            smp_set_wfe_mode(true);
             break;
         case T6020:
         case T6021:
@@ -560,16 +559,11 @@ u64 smp_wait(int cpu)
 
 int smp_set_wfe_mode(bool new_mode)
 {
-    if (chip_id == T8152 && !new_mode) {
-        printf("T8152 requires WFE mode\n");
-        return -1;
-    }
-
     wfe_mode = new_mode;
     sysop("dsb sy");
 
     for (int cpu = 0; cpu < MAX_CPUS; cpu++)
-        if (chip_id != T8152 && cpu != boot_cpu_idx && smp_is_alive(cpu))
+        if (cpu != boot_cpu_idx && smp_is_alive(cpu))
             smp_send_ipi(cpu);
 
     sysop("sev");
