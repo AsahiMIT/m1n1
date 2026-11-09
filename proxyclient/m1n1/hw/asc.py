@@ -31,10 +31,11 @@ class R_OUTBOX1(Register64):
     INPTR   = 43, 40
     EP      = 7, 0
 
-class ASCRegs(RegMap):
+class ASCCPURegs(RegMap):
     CPU_CONTROL = 0x0044, R_CPU_CONTROL
     CPU_STATUS  = 0x0048, R_CPU_STATUS
 
+class ASCRegs(ASCCPURegs):
     INBOX_CTRL  = 0x8110, R_MBOX_CTRL
     OUTBOX_CTRL = 0x8114, R_MBOX_CTRL
     INBOX0      = 0x8800, Register64
