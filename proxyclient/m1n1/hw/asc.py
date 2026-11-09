@@ -43,28 +43,80 @@ class ASCRegs(ASCCPURegs):
     OUTBOX0     = 0x8830, Register64
     OUTBOX1     = 0x8838, R_OUTBOX1
 
+class R_MSGBOX_STATUS(Register32):
+    RX = 3, 0
+    TX = 11, 8
+
+class ASCMessageboxRegs(RegMap):
+    RECV   = irange(0x00, 4, 4), Register32
+    SEND   = irange(0x10, 4, 4), Register32
+    STATUS = 0x20, R_MSGBOX_STATUS
+
 class ASC:
-    def __init__(self, u, asc_base):
+    def __init__(self, u, asc_base, *, messagebox_base=None):
         self.u = u
         self.p = u.proxy
         self.iface = u.iface
-        self.asc = ASCRegs(u, asc_base)
+        if messagebox_base is None:
+            self.asc = ASCRegs(u, asc_base)
+            self.msgbox = None
+        else:
+            self.asc = ASCCPURegs(u, asc_base)
+            self.msgbox = ASCMessageboxRegs(u, messagebox_base)
         self.verbose = 0
         self.epmap = {}
 
+    @classmethod
+    def from_adt(cls, u, path, **kwargs):
+        node = u.adt[path]
+        asc_base = node.get_reg(0)[0]
+        if "iop,ascwrap-v8" not in node.compatible:
+            return cls(u, asc_base, **kwargs)
+
+        def flag(name):
+            value = node._properties.get(name)
+            return (isinstance(value, int) and value != 0) or value in ("true", b"true\0")
+
+        mailbox = node._properties.get("msgbox-mailbox-num", 0)
+        if not isinstance(mailbox, int) or not 0 <= mailbox <= 0xffffffff:
+            raise ValueError("Invalid ASC mailbox number")
+        aperture = 2 * mailbox + (not flag("msgbox-using-postoffice"))
+        offset = aperture * 0x80 + (0 if flag("msgbox-using-alias") else 0x10000)
+        base, size = node.get_reg(2)
+        if offset + 0x80 > size:
+            raise ValueError("ASC mailbox aperture exceeds its register range")
+        return cls(u, asc_base, messagebox_base=base + offset, **kwargs)
+
     def recv(self):
-        if self.asc.OUTBOX_CTRL.reg.EMPTY:
+        if not self.has_messages():
             return None, None
 
-        msg0 = self.asc.OUTBOX0.val
-        msg1 = R_INBOX1(self.asc.OUTBOX1.val)
+        if self.msgbox is None:
+            msg0 = self.asc.OUTBOX0.val
+            msg1 = R_INBOX1(self.asc.OUTBOX1.val)
+        else:
+            msg0 = self.msgbox.RECV[0].val | (self.msgbox.RECV[1].val << 32)
+            msg1 = R_INBOX1(self.msgbox.RECV[2].val)
+            # Reading the fourth word pops the receive FIFO.
+            _ = self.msgbox.RECV[3].val
         if self.verbose >= 3:
             print(f"< {msg1.EP:02x}:{msg0:#x}")
         return msg0, msg1
 
     def send(self, msg0, msg1):
-        self.asc.INBOX0.val = msg0
-        self.asc.INBOX1.val = msg1
+        if self.msgbox is None:
+            self.asc.INBOX0.val = msg0
+            self.asc.INBOX1.val = msg1
+        else:
+            deadline = time.monotonic() + 0.2
+            while not self.msgbox.STATUS.reg.TX:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("ASC messagebox full for 200ms")
+            value = int(msg0)
+            self.msgbox.SEND[0].val = value & 0xffffffff
+            self.msgbox.SEND[1].val = (value >> 32) & 0xffffffff
+            self.msgbox.SEND[2].val = int(msg1) & 0xffffffff
+            self.msgbox.SEND[3].val = 0
 
         if self.verbose >= 3:
             if isinstance(msg0, Register):
@@ -72,10 +124,13 @@ class ASC:
             else:
                 print(f"> {msg1.EP:02x}:{msg0:#x}")
 
-        while self.asc.INBOX_CTRL.reg.FULL:
-            pass
+        if self.msgbox is None:
+            while self.asc.INBOX_CTRL.reg.FULL:
+                pass
 
     def is_running(self):
+        if self.msgbox is not None:
+            return bool(self.asc.CPU_CONTROL.reg.RUN)
         return not self.asc.CPU_STATUS.reg.STOPPED
 
     def boot(self):
@@ -89,6 +144,8 @@ class ASC:
         setattr(self, ep.SHORT, ep)
 
     def has_messages(self):
+        if self.msgbox is not None:
+            return bool(self.msgbox.STATUS.reg.RX)
         return not self.asc.OUTBOX_CTRL.reg.EMPTY
 
     def work_pending(self):
@@ -96,7 +153,7 @@ class ASC:
             self.work()
 
     def work(self):
-        if self.asc.OUTBOX_CTRL.reg.EMPTY:
+        if not self.has_messages():
             return True
 
         msg0, msg1 = self.recv()

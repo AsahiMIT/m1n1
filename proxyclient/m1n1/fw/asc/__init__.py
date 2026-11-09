@@ -26,8 +26,8 @@ class StandardASC(ASC):
         0xa: ASCDummyEndpoint, # tracekit
     }
 
-    def __init__(self, u, asc_base, dart=None, stream=0):
-        super().__init__(u, asc_base)
+    def __init__(self, u, asc_base, dart=None, stream=0, *, messagebox_base=None):
+        super().__init__(u, asc_base, messagebox_base=messagebox_base)
         self.remote_eps = set()
         self.add_ep(0, ASCManagementEndpoint(self, 0))
         self.dart = dart
