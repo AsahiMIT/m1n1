@@ -1,5 +1,5 @@
+// SPDX-License-Identifier: MIT
 use proc_macro::{Delimiter, Group, Ident, Punct, Spacing, Span, TokenStream, TokenTree};
-
 
 //use crate::helpers::expect_punct;
 
@@ -110,63 +110,90 @@ fn check_version(
     ver: &[usize],
     it: &mut impl Iterator<Item = TokenTree>,
 ) -> bool {
-    let first = it.next().unwrap();
-    let val: bool = match &first {
-        TokenTree::Group(group) => check_version(config, ver, &mut group.stream().into_iter()),
-        TokenTree::Ident(ident) => {
-            let key = config
-                .fields
-                .iter()
-                .position(|&r| r == ident.to_string())
-                .unwrap_or_else(|| panic!("Unknown field {}", ident));
-            let mut operator = expect_punct(it);
-            let mut rhs_token = it.next().unwrap();
-            if let TokenTree::Punct(punct) = &rhs_token {
-                operator.extend(std::iter::once(punct.as_char()));
-                rhs_token = it.next().unwrap();
-            }
-            let rhs_name = if let TokenTree::Ident(ident) = &rhs_token {
-                ident.to_string()
-            } else {
-                panic!("Unexpected token {}", ident)
-            };
-
-            let rhs = config.enums[key]
-                .iter()
-                .position(|&r| r == rhs_name)
-                .unwrap_or_else(|| panic!("Unknown value for {}:{}", ident, rhs_name));
-            let lhs = ver[key];
-
-            match operator.as_str() {
-                "==" => lhs == rhs,
-                "!=" => lhs != rhs,
-                ">" => lhs > rhs,
-                ">=" => lhs >= rhs,
-                "<" => lhs < rhs,
-                "<=" => lhs <= rhs,
-                _ => panic!("Unknown operator {}", operator),
-            }
-        }
-        _ => {
-            panic!("Unknown token {}", first)
-        }
+    let mut expression = VersionExpr {
+        config,
+        ver,
+        tokens: it.collect::<TokenStream>().into_iter().peekable(),
     };
+    let value = expression.parse_or();
+    if let Some(token) = expression.tokens.next() {
+        panic!("Unexpected token {}", token);
+    }
+    value
+}
 
-    let boolop = it.next();
-    match boolop {
-        Some(TokenTree::Punct(punct)) => {
-            let right = expect_punct(it);
-            if right != punct.to_string() {
-                panic!("Unexpected op {}{}", punct, right);
-            }
-            match punct.as_char() {
-                '&' => val && check_version(config, ver, it),
-                '|' => val || check_version(config, ver, it),
-                _ => panic!("Unexpected op {}{}", right, right),
-            }
+struct VersionExpr<'a> {
+    config: &'a VersionConfig,
+    ver: &'a [usize],
+    tokens: std::iter::Peekable<proc_macro::token_stream::IntoIter>,
+}
+
+impl VersionExpr<'_> {
+    fn parse_or(&mut self) -> bool {
+        let mut value = self.parse_and();
+        while self.take_bool_op('|') {
+            value |= self.parse_and();
         }
-        Some(a) => panic!("Unexpected op {}", a),
-        None => val,
+        value
+    }
+
+    fn parse_and(&mut self) -> bool {
+        let mut value = self.parse_atom();
+        while self.take_bool_op('&') {
+            value &= self.parse_atom();
+        }
+        value
+    }
+
+    fn take_bool_op(&mut self, operator: char) -> bool {
+        if !matches!(self.tokens.peek(), Some(TokenTree::Punct(p)) if p.as_char() == operator) {
+            return false;
+        }
+        self.tokens.next();
+        if !matches!(self.tokens.next(), Some(TokenTree::Punct(p)) if p.as_char() == operator) {
+            panic!("Expected {}{}", operator, operator);
+        }
+        true
+    }
+
+    fn parse_atom(&mut self) -> bool {
+        let first = self.tokens.next().expect("Expected version condition");
+        let ident = match first {
+            TokenTree::Group(group) => {
+                return check_version(self.config, self.ver, &mut group.stream().into_iter());
+            }
+            TokenTree::Ident(ident) => ident,
+            token => panic!("Expected version field or group, found {}", token),
+        };
+        let key = self
+            .config
+            .fields
+            .iter()
+            .position(|&r| r == ident.to_string())
+            .unwrap_or_else(|| panic!("Unknown field {}", ident));
+        let mut operator = expect_punct(&mut self.tokens);
+        if matches!(self.tokens.peek(), Some(TokenTree::Punct(p)) if p.as_char() == '=') {
+            self.tokens.next();
+            operator.push('=');
+        }
+        let rhs_name = match self.tokens.next() {
+            Some(TokenTree::Ident(rhs)) => rhs.to_string(),
+            token => panic!("Expected version value, found {:?}", token),
+        };
+        let rhs = self.config.enums[key]
+            .iter()
+            .position(|&r| r == rhs_name)
+            .unwrap_or_else(|| panic!("Unknown value for {}:{}", ident, rhs_name));
+        let lhs = self.ver[key];
+        match operator.as_str() {
+            "==" => lhs == rhs,
+            "!=" => lhs != rhs,
+            ">" => lhs > rhs,
+            ">=" => lhs >= rhs,
+            "<" => lhs < rhs,
+            "<=" => lhs <= rhs,
+            _ => panic!("Unknown operator {}", operator),
+        }
     }
 }
 
@@ -277,6 +304,26 @@ fn filter_versions(
 }
 
 /// Declares multiple variants of a structure or impl code
+///
+/// Conditions use Rust's `&&`/`||` precedence and validate every branch.
+///
+/// ```compile_fail
+/// use versions::versions;
+/// #[versions(AGX)]
+/// struct Packet {
+///     #[ver(G >= G13 || V == TYPO)]
+///     value: u32,
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use versions::versions;
+/// #[versions(AGX)]
+/// struct Packet {
+///     #[ver(G >= G13 ||)]
+///     value: u32,
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn versions(attr: TokenStream, item: TokenStream) -> TokenStream {
     let config = match attr.to_string().as_str() {
